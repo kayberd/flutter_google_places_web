@@ -44,23 +44,25 @@ class FlutterGooglePlacesWeb extends StatefulWidget {
   final InputDecoration? decoration;
   final bool? required;
   final Function? onSelected;
+  final String? initialValue;
+
   FlutterGooglePlacesWeb(
       {Key? key,
-        this.apiKey,
-        this.proxyURL,
-        this.offset,
-        this.components,
-        this.sessionToken = true,
-        this.decoration,
-        this.required,
-        this.onSelected});
+      this.apiKey,
+      this.proxyURL,
+      this.offset,
+      this.components,
+      this.sessionToken = true,
+      this.decoration,
+      this.required,
+      this.onSelected,
+      this.initialValue});
 
   @override
   FlutterGooglePlacesWebState createState() => FlutterGooglePlacesWebState();
 }
 
-class FlutterGooglePlacesWebState extends State<FlutterGooglePlacesWeb>
-    with SingleTickerProviderStateMixin {
+class FlutterGooglePlacesWebState extends State<FlutterGooglePlacesWeb> with SingleTickerProviderStateMixin {
   final controller = TextEditingController();
   late AnimationController _animationController;
   Animation<Color>? _loadingTween;
@@ -88,16 +90,13 @@ class FlutterGooglePlacesWebState extends State<FlutterGooglePlacesWeb>
       });
     }
 
-    String baseURL =
-        'https://maps.googleapis.com/maps/api/place/autocomplete/json';
+    String baseURL = 'https://maps.googleapis.com/maps/api/place/autocomplete/json';
     String type = 'address';
     String input = Uri.encodeComponent(inputText);
     if (widget.proxyURL == null) {
-      proxiedURL =
-      '$baseURL?input=$input&key=${widget.apiKey}&type=$type&sessiontoken=$_sessionToken';
+      proxiedURL = '$baseURL?input=$input&key=${widget.apiKey}&type=$type&sessiontoken=$_sessionToken';
     } else {
-      proxiedURL =
-      '${widget.proxyURL}$baseURL?input=$input&key=${widget.apiKey}&type=$type&sessiontoken=$_sessionToken';
+      proxiedURL = '${widget.proxyURL}$baseURL?input=$input&key=${widget.apiKey}&type=$type&sessiontoken=$_sessionToken';
     }
     if (widget.offset == null) {
       offsetURL = proxiedURL;
@@ -119,8 +118,7 @@ class FlutterGooglePlacesWebState extends State<FlutterGooglePlacesWeb>
     for (var i = 0; i < predictions.length; i++) {
       String? placeId = predictions[i]['place_id'];
       String? name = predictions[i]['description'];
-      String? streetAddress =
-      predictions[i]['structured_formatting']['main_text'];
+      String? streetAddress = predictions[i]['structured_formatting']['main_text'];
       List<dynamic> terms = predictions[i]['terms'];
       String? city = terms[terms.length - 2]['value'];
       String? country = terms[terms.length - 1]['value'];
@@ -142,8 +140,7 @@ class FlutterGooglePlacesWebState extends State<FlutterGooglePlacesWeb>
       FlutterGooglePlacesWeb.showResults = false;
       controller.text = clickedAddress.name!;
       FlutterGooglePlacesWeb.value!['name'] = clickedAddress.name;
-      FlutterGooglePlacesWeb.value!['streetAddress'] =
-          clickedAddress.streetAddress;
+      FlutterGooglePlacesWeb.value!['streetAddress'] = clickedAddress.streetAddress;
       FlutterGooglePlacesWeb.value!['city'] = clickedAddress.city;
       FlutterGooglePlacesWeb.value!['country'] = clickedAddress.country;
     });
@@ -151,9 +148,10 @@ class FlutterGooglePlacesWebState extends State<FlutterGooglePlacesWeb>
 
   @override
   void initState() {
+    if (widget.initialValue != null) controller.text = widget.initialValue!;
+
     FlutterGooglePlacesWeb.value = {};
-    _animationController =
-        AnimationController(duration: Duration(seconds: 3), vsync: this);
+    _animationController = AnimationController(duration: Duration(seconds: 3), vsync: this);
     _loadingTween = RainbowColorTween([
       //Google Colors
       Color(0xFF4285F4), //Google Blue
@@ -202,53 +200,46 @@ class FlutterGooglePlacesWebState extends State<FlutterGooglePlacesWeb>
                 ),
                 FlutterGooglePlacesWeb.showResults
                     ? Padding(
-                  padding: EdgeInsets.only(top: 50),
-                  child: Container(
-                    width: MediaQuery.of(context).size.width,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          fit: FlexFit.loose,
-                          child: displayedResults.isEmpty
-                              ? Container(
-                            padding: EdgeInsets.only(
-                                top: 102, bottom: 102),
-                            child: CircularProgressIndicator(
-                              valueColor: _loadingTween,
-                              strokeWidth: 6.0,
-                            ),
-                          )
-                              : ListView(
-                            shrinkWrap: true,
-                            children: displayedResults
-                                .map((Address addressData) =>
-                                SearchResultsTile(
-                                    addressData: addressData,
-                                    callback: selectResult,
-                                    address:
-                                    FlutterGooglePlacesWeb
-                                        .value))
-                                .toList(),
+                        padding: EdgeInsets.only(top: 50),
+                        child: Container(
+                          width: MediaQuery.of(context).size.width,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                fit: FlexFit.loose,
+                                child: displayedResults.isEmpty
+                                    ? Container(
+                                        padding: EdgeInsets.only(top: 102, bottom: 102),
+                                        child: CircularProgressIndicator(
+                                          valueColor: _loadingTween,
+                                          strokeWidth: 6.0,
+                                        ),
+                                      )
+                                    : ListView(
+                                        shrinkWrap: true,
+                                        children: displayedResults
+                                            .map((Address addressData) => SearchResultsTile(
+                                                addressData: addressData, callback: selectResult, address: FlutterGooglePlacesWeb.value))
+                                            .toList(),
+                                      ),
+                              ),
+                              Container(
+                                height: 30,
+                                child: Image.asset(
+                                  'packages/flutter_google_places/assets/google_white.png',
+                                  scale: 3,
+                                ),
+                              ),
+                            ],
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            border: Border.all(color: Colors.grey[200]!, width: 0.5),
                           ),
                         ),
-                        Container(
-                          height: 30,
-                          child: Image.asset(
-                            'packages/flutter_google_places/assets/google_white.png',
-                            scale: 3,
-                          ),
-                        ),
-                      ],
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      border:
-                      Border.all(color: Colors.grey[200]!, width: 0.5),
-                    ),
-                  ),
-                )
+                      )
                     : Container(),
               ],
             ),
