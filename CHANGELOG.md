@@ -1,4 +1,4 @@
-## [0.1.2] - Updated Dependencies
+## [1.0.0] - Updated Dependencies
 
 ## [0.1.1] - Fixed Memory Leak on Loading Animation
 
