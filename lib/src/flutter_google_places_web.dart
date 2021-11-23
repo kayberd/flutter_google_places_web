@@ -1,268 +1,432 @@
+library flutter_google_places.src;
+
+import 'dart:async';
+import 'dart:io';
+
+import 'package:PetLEO/app/api/location-service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/animation.dart';
-import 'package:dio/dio.dart';
-import 'package:rainbow_color/rainbow_color.dart';
-import 'package:uuid/uuid.dart';
-import 'package:flutter_google_places_web/src/search_results_tile.dart';
+import 'package:google_maps_webservice/places.dart';
+import 'package:http/http.dart';
+import 'package:rxdart/rxdart.dart';
 
-class FlutterGooglePlacesWeb extends StatefulWidget {
-  ///[value] stores the clicked address data in
-  ///FlutterGooglePlacesWeb.value['name'] = '1600 Amphitheatre Parkway, Mountain View, CA, USA';
-  ///FlutterGooglePlacesWeb.value['streetAddress'] = '1600 Amphitheatre Parkway';
-  ///FlutterGooglePlacesWeb.value['city'] = 'CA';
-  ///FlutterGooglePlacesWeb.value['country'] = 'USA';
-  static Map<String, String?>? value;
+class PLPlacesAutocompleteWidget extends StatefulWidget {
+  final String apiKey;
+  final String? hint;
+  final Location? location;
+  final num? offset;
+  final num? radius;
+  final String? language;
+  final String? sessionToken;
+  final List<String>? types;
+  final List<Component>? components;
+  final bool? strictbounds;
+  final Mode mode;
+  final Widget? logo;
+  final ValueChanged<PlacesAutocompleteResponse>? onError;
 
-  ///[showResults] boolean shows results container
-  static bool showResults = false;
+  /// optional - sets 'proxy' value in google_maps_webservice
+  ///
+  /// In case of using a proxy the baseUrl can be set.
+  /// The apiKey is not required in case the proxy sets it.
+  /// (Not storing the apiKey in the app is good practice)
+  final String? proxyBaseUrl;
 
-  ///This is the API Key that is needed to communicate with google places API
-  ///Get API Key: https://developers.google.com/places/web-service/get-api-key
-  final String? apiKey;
+  /// optional - set 'client' value in google_maps_webservice
+  ///
+  /// In case of using a proxy url that requires authentication
+  /// or custom configuration
+  final BaseClient? httpClient;
 
-  ///Proxy to be used if having CORS XMLError or want to use for security
-  final String? proxyURL;
-
-  ///The position, in the input term, of the last character that the service uses to match predictions.
-  ///For example, if the input is 'Google' and the [offset] is 3, the service will match on 'Goo'.
-  ///The string determined by the [offset] is matched against the first word in the input term only.
-  ///For example, if the input term is 'Google abc' and the [offset] is 3, the service will attempt to match against 'Goo abc'.
-  ///If no [offset] is supplied, the service will use the whole term. The [offset] should generally be set to the position of the text caret.
-  final int? offset;
-
-  ///[sessionToken] is a boolean that enable/disables a UUID v4 session token. [sessionToken] is [true] by default.
-  ///Google recommends using session tokens for all autocomplete sessions
-  ///Read more about session tokens https://developers.google.com/places/web-service/session-tokens
-  final bool sessionToken;
-
-  ///Currently, you can use components to filter by up to 5 countries.
-  ///Countries must be passed as a two character, ISO 3166-1 Alpha-2 compatible country code.
-  ///For example: components=country:fr would restrict your results to places within France.
-  ///Multiple countries must be passed as multiple country:XX filters, with the pipe character (|) as a separator.
-  ///For example: components=country:us|country:pr|country:vi|country:gu|country:mp would restrict your results to places within the United States and its unincorporated organized territories.
-  final String? components;
-  final InputDecoration? decoration;
-  final bool? required;
-  final Function? onSelected;
-  final String? initialValue;
-
-  FlutterGooglePlacesWeb(
-      {Key? key,
-      this.apiKey,
-      this.proxyURL,
-      this.offset,
-      this.components,
-      this.sessionToken = true,
-      this.decoration,
-      this.required,
-      this.onSelected,
-      this.initialValue});
+  PLPlacesAutocompleteWidget(
+      {required this.apiKey,
+        this.mode = Mode.fullscreen,
+        this.hint = 'Search..',
+        this.offset,
+        this.location,
+        this.radius,
+        this.language,
+        this.sessionToken,
+        this.types,
+        this.components,
+        this.strictbounds,
+        this.logo,
+        this.onError,
+        Key? key,
+        this.proxyBaseUrl,
+        this.httpClient})
+      : super(key: key);
 
   @override
-  FlutterGooglePlacesWebState createState() => FlutterGooglePlacesWebState();
+  State<PLPlacesAutocompleteWidget> createState() {
+    if (mode == Mode.fullscreen) {
+      return _PLPlacesAutocompleteScaffoldState();
+    }
+    return _PLPlacesAutocompleteOverlayState();
+  }
+
+  static PLPlacesAutocompleteState? of(BuildContext context) => context.findAncestorStateOfType<PLPlacesAutocompleteState>();
 }
 
-class FlutterGooglePlacesWebState extends State<FlutterGooglePlacesWeb> with SingleTickerProviderStateMixin {
-  final controller = TextEditingController();
-  late AnimationController _animationController;
-  Animation<Color>? _loadingTween;
-  List<Address> displayedResults = [];
-  String? proxiedURL;
-  String? offsetURL;
-  String? componentsURL;
-  String? _sessionToken;
-  var uuid = Uuid();
+class _PLPlacesAutocompleteScaffoldState extends PLPlacesAutocompleteState {
+  @override
+  Widget build(BuildContext context) {
+    final appBar = AppBar(title: AppBarPLPlacesAutoCompleteTextField());
+    final body = PLPlacesAutocompleteResult(
+      onTap: Navigator.of(context).pop,
+      logo: widget.logo,
+    );
+    return Scaffold(appBar: appBar, body: body);
+  }
+}
 
-  Future<List<Address>> getLocationResults(String inputText) async {
-    if (_sessionToken == null && widget.sessionToken == true) {
-      setState(() {
-        _sessionToken = uuid.v4();
-      });
-    }
+class _PLPlacesAutocompleteOverlayState extends PLPlacesAutocompleteState {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
 
-    if (inputText.isEmpty) {
-      setState(() {
-        FlutterGooglePlacesWeb.showResults = false;
-      });
+    final header = Column(children: <Widget>[
+      Material(
+          color: theme.dialogBackgroundColor,
+          borderRadius: BorderRadius.only(topLeft: Radius.circular(2.0), topRight: Radius.circular(2.0)),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              IconButton(
+                color: theme.brightness == Brightness.light ? Colors.black45 : null,
+                icon: _iconBack,
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+              ),
+              Expanded(
+                  child: Padding(
+                    child: _textField(context),
+                    padding: const EdgeInsets.only(right: 8.0),
+                  )),
+            ],
+          )),
+      Divider(
+        //height: 1.0,
+      )
+    ]);
+
+    var body;
+
+    if (_searching) {
+      body = Stack(
+        children: <Widget>[_Loader()],
+        alignment: FractionalOffset.bottomCenter,
+      );
+    } else if (_queryTextController!.text.isEmpty || _response == null || _response!.predictions.isEmpty) {
+      body = Material(
+        color: theme.dialogBackgroundColor,
+        child: widget.logo ?? PoweredByGoogleImage(),
+        borderRadius: BorderRadius.only(bottomLeft: Radius.circular(2.0), bottomRight: Radius.circular(2.0)),
+      );
     } else {
-      setState(() {
-        FlutterGooglePlacesWeb.showResults = true;
-      });
+      body = SingleChildScrollView(
+        child: Material(
+          borderRadius: BorderRadius.only(
+            bottomLeft: Radius.circular(2.0),
+            bottomRight: Radius.circular(2.0),
+          ),
+          color: theme.dialogBackgroundColor,
+          child: ListBody(
+            children: _response!.predictions
+                .map(
+                  (p) => PredictionTile(
+                prediction: p,
+                onTap: Navigator.of(context).pop,
+              ),
+            )
+                .toList(),
+          ),
+        ),
+      );
     }
 
-    String baseURL = 'https://maps.googleapis.com/maps/api/place/autocomplete/json';
-    String type = 'address';
-    String input = Uri.encodeComponent(inputText);
-    if (widget.proxyURL == null) {
-      proxiedURL = '$baseURL?input=$input&key=${widget.apiKey}&type=$type&sessiontoken=$_sessionToken';
-    } else {
-      proxiedURL = '${widget.proxyURL}$baseURL?input=$input&key=${widget.apiKey}&type=$type&sessiontoken=$_sessionToken';
-    }
-    if (widget.offset == null) {
-      offsetURL = proxiedURL;
-    } else {
-      offsetURL = proxiedURL! + '&offset=${widget.offset}';
-    }
-    if (widget.components == null) {
-      componentsURL = offsetURL;
-    } else {
-      componentsURL = offsetURL! + '&components=${widget.components}';
-    }
-    print(componentsURL);
-    Response response = await Dio().get(componentsURL!);
-    var predictions = response.data['predictions'];
-    if (predictions != []) {
-      displayedResults.clear();
-    }
+    final container = Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 30.0),
+        child: Stack(children: <Widget>[
+          header,
+          Padding(padding: EdgeInsets.only(top: 48.0), child: body),
+        ]));
 
-    for (var i = 0; i < predictions.length; i++) {
-      String? placeId = predictions[i]['place_id'];
-      String? name = predictions[i]['description'];
-      String? streetAddress = predictions[i]['structured_formatting']['main_text'];
-      List<dynamic> terms = predictions[i]['terms'];
-      String? city = terms[terms.length - 2]['value'];
-      String? country = terms[terms.length - 1]['value'];
-      displayedResults.add(Address(
-        placeId: placeId,
-        name: name,
-        streetAddress: streetAddress,
-        city: city,
-        country: country,
-      ));
+    if (!kIsWeb && Platform.isIOS) {
+      return Padding(padding: EdgeInsets.only(top: 8.0), child: container);
     }
-
-    return displayedResults;
+    return container;
   }
 
-  selectResult(Address clickedAddress) {
-    widget.onSelected?.call(clickedAddress.placeId);
-    setState(() {
-      FlutterGooglePlacesWeb.showResults = false;
-      controller.text = clickedAddress.name!;
-      FlutterGooglePlacesWeb.value!['name'] = clickedAddress.name;
-      FlutterGooglePlacesWeb.value!['streetAddress'] = clickedAddress.streetAddress;
-      FlutterGooglePlacesWeb.value!['city'] = clickedAddress.city;
-      FlutterGooglePlacesWeb.value!['country'] = clickedAddress.country;
-    });
+  Icon get _iconBack => kIsWeb || Platform.isIOS ? Icon(Icons.arrow_back_ios) : Icon(Icons.arrow_back);
+
+  Widget _textField(BuildContext context) => TextField(
+    controller: _queryTextController,
+    autofocus: true,
+    style: TextStyle(color: Theme.of(context).brightness == Brightness.light ? Colors.black87 : null, fontSize: 16.0),
+    decoration: InputDecoration(
+      hintText: widget.hint,
+      hintStyle: TextStyle(
+        color: Theme.of(context).brightness == Brightness.light ? Colors.black45 : null,
+        fontSize: 16.0,
+      ),
+      border: InputBorder.none,
+    ),
+  );
+}
+
+class _Loader extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(constraints: BoxConstraints(maxHeight: 2.0), child: LinearProgressIndicator());
   }
+}
+
+class PLPlacesAutocompleteResult extends StatefulWidget {
+  final ValueChanged<Prediction>? onTap;
+  final Widget? logo;
+
+  PLPlacesAutocompleteResult({this.onTap, this.logo});
 
   @override
-  void initState() {
-    if (widget.initialValue != null) controller.text = widget.initialValue!;
+  _PLPlacesAutocompleteResult createState() => _PLPlacesAutocompleteResult();
+}
 
-    FlutterGooglePlacesWeb.value = {};
-    _animationController = AnimationController(duration: Duration(seconds: 3), vsync: this);
-    _loadingTween = RainbowColorTween([
-      //Google Colors
-      Color(0xFF4285F4), //Google Blue
-      Color(0xFF0F9D58), //Google Green
-      Color(0xFFF4B400), //Google Tellow
-      Color(0xFFDB4437), //Google Red
-    ]).animate(_animationController)
-      ..addListener(() {
-        setState(() {});
-      });
-    _animationController.forward();
-    _animationController.repeat();
-    super.initState();
+class _PLPlacesAutocompleteResult extends State<PLPlacesAutocompleteResult> {
+  @override
+  Widget build(BuildContext context) {
+    final state = PLPlacesAutocompleteWidget.of(context)!;
+    assert(state != null);
+
+    if (state._queryTextController!.text.isEmpty || state._response == null || state._response!.predictions.isEmpty) {
+      final children = <Widget>[];
+      if (state._searching) {
+        children.add(_Loader());
+      }
+      children.add(widget.logo ?? PoweredByGoogleImage());
+      return Stack(children: children);
+    }
+    return PredictionsListView(
+      predictions: state._response!.predictions,
+      onTap: widget.onTap,
+    );
   }
+}
 
-  final addressFormKey = GlobalKey<FormState>();
+class AppBarPLPlacesAutoCompleteTextField extends StatefulWidget {
+  @override
+  _AppBarPLPlacesAutoCompleteTextFieldState createState() => _AppBarPLPlacesAutoCompleteTextFieldState();
+}
+
+class _AppBarPLPlacesAutoCompleteTextFieldState extends State<AppBarPLPlacesAutoCompleteTextField> {
+  @override
+  Widget build(BuildContext context) {
+    final state = PLPlacesAutocompleteWidget.of(context)!;
+    assert(state != null);
+
+    return Container(
+        alignment: Alignment.topLeft,
+        margin: EdgeInsets.only(top: 4.0),
+        child: TextField(
+          controller: state._queryTextController,
+          autofocus: true,
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: 16.0,
+          ),
+          decoration: InputDecoration(
+            hintText: state.widget.hint,
+            filled: true,
+            fillColor: Colors.white,
+            hintStyle: TextStyle(
+              color: Colors.black54,
+              fontSize: 16.0,
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(32.0))),
+            contentPadding: EdgeInsets.symmetric(horizontal: 24.0, vertical: 13.0),
+          ),
+        ));
+  }
+}
+
+class PoweredByGoogleImage extends StatelessWidget {
+  final _poweredByGoogleWhite = "packages/flutter_google_places/assets/google_white.png";
+  final _poweredByGoogleBlack = "packages/flutter_google_places/assets/google_black.png";
 
   @override
   Widget build(BuildContext context) {
-    return Flex(
-      direction: Axis.vertical,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Flexible(
-          fit: FlexFit.loose,
-          child: Container(
-            alignment: Alignment.center,
-            child: Stack(
-              children: [
-                //search field
-                TextFormField(
-                  key: widget.key,
-                  controller: controller,
-                  decoration: widget.decoration,
-                  validator: (value) {
-                    if (widget.required == true && value!.isEmpty) {
-                      return 'Please enter an address';
-                    }
-                    return null;
-                  },
-                  onChanged: (text) {
-                    setState(() {
-                      getLocationResults(text);
-                    });
-                  },
-                ),
-                FlutterGooglePlacesWeb.showResults
-                    ? Padding(
-                        padding: EdgeInsets.only(top: 50),
-                        child: Container(
-                          width: MediaQuery.of(context).size.width,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(
-                                fit: FlexFit.loose,
-                                child: displayedResults.isEmpty
-                                    ? Container(
-                                        padding: EdgeInsets.only(top: 102, bottom: 102),
-                                        child: CircularProgressIndicator(
-                                          valueColor: _loadingTween,
-                                          strokeWidth: 6.0,
-                                        ),
-                                      )
-                                    : ListView(
-                                        shrinkWrap: true,
-                                        children: displayedResults
-                                            .map((Address addressData) => SearchResultsTile(
-                                                addressData: addressData, callback: selectResult, address: FlutterGooglePlacesWeb.value))
-                                            .toList(),
-                                      ),
-                              ),
-                              Container(
-                                height: 30,
-                                child: Image.asset(
-                                  'packages/flutter_google_places/assets/google_white.png',
-                                  scale: 3,
-                                ),
-                              ),
-                            ],
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            border: Border.all(color: Colors.grey[200]!, width: 0.5),
-                          ),
-                        ),
-                      )
-                    : Container(),
-              ],
-            ),
-          ),
-        ),
-      ],
+    return Row(mainAxisAlignment: MainAxisAlignment.center, children: <Widget>[
+      Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Image.asset(
+            Theme.of(context).brightness == Brightness.light ? _poweredByGoogleWhite : _poweredByGoogleBlack,
+            scale: 2.5,
+          ))
+    ]);
+  }
+}
+
+class PredictionsListView extends StatelessWidget {
+  final List<Prediction> predictions;
+  final ValueChanged<Prediction>? onTap;
+
+  PredictionsListView({required this.predictions, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      children: predictions.map((Prediction p) => PredictionTile(prediction: p, onTap: onTap)).toList(),
     );
+  }
+}
+
+class PredictionTile extends StatelessWidget {
+  final Prediction prediction;
+  final ValueChanged<Prediction>? onTap;
+
+  PredictionTile({required this.prediction, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(Icons.location_on),
+      title: Text(prediction.description!),
+      onTap: () {
+        if (onTap != null) {
+          onTap!(prediction);
+        }
+      },
+    );
+  }
+}
+
+enum Mode { overlay, fullscreen }
+
+abstract class PLPlacesAutocompleteState extends State<PLPlacesAutocompleteWidget> {
+  TextEditingController? _queryTextController;
+  PlacesAutocompleteResponse? _response;
+  late GoogleMapsPlaces _places;
+  late bool _searching;
+
+  final _queryBehavior = BehaviorSubject<String>.seeded('');
+
+  @override
+  void initState() {
+    super.initState();
+    _queryTextController = TextEditingController(text: "");
+
+    _places = GoogleMapsPlaces(apiKey: widget.apiKey, baseUrl: widget.proxyBaseUrl, httpClient: widget.httpClient);
+    _searching = false;
+
+    _queryTextController!.addListener(_onQueryChange);
+
+    _queryBehavior.stream.debounceTime(const Duration(milliseconds: 300)).listen(doSearch);
+  }
+
+  Future<Null> doSearch(String value) async {
+    if (mounted && value.isNotEmpty) {
+      setState(() {
+        _searching = true;
+      });
+
+      final res = await _places.autocomplete(
+        value,
+        offset: widget.offset,
+        location: widget.location,
+        radius: widget.radius,
+        language: widget.language,
+        sessionToken: widget.sessionToken,
+        types: widget.types ?? [],
+        components: widget.components ?? [],
+        strictbounds: widget.strictbounds ?? false,
+      );
+
+      if (res.errorMessage?.isNotEmpty == true || res.status == "REQUEST_DENIED") {
+        onResponseError(res);
+      } else {
+        onResponse(res);
+      }
+    } else {
+      onResponse(null);
+    }
+  }
+
+  void _onQueryChange() {
+    _queryBehavior.add(_queryTextController!.text);
   }
 
   @override
   void dispose() {
-    controller.dispose();
-    _animationController.dispose();
     super.dispose();
+
+    _places.dispose();
+    _queryBehavior.close();
+    _queryTextController!.removeListener(_onQueryChange);
+  }
+
+  @mustCallSuper
+  void onResponseError(PlacesAutocompleteResponse res) {
+    if (!mounted) return;
+
+    if (widget.onError != null) {
+      widget.onError!(res);
+    }
+    setState(() {
+      _response = null;
+      _searching = false;
+    });
+  }
+
+  @mustCallSuper
+  void onResponse(PlacesAutocompleteResponse? res) {
+    if (!mounted) return;
+
+    setState(() {
+      _response = res;
+      _searching = false;
+    });
   }
 }
 
-class Address {
-  String? placeId;
-  String? name;
-  String? streetAddress;
-  String? city;
-  String? country;
+class PLPlacesAutocomplete {
+  static Future<Prediction?> show(
+      {required BuildContext context,
+        required String apiKey,
+        Mode mode = Mode.fullscreen,
+        String? hint = 'Search..',
+        num? offset,
+        Location? location,
+        num? radius,
+        String? language,
+        String? sessionToken,
+        List<String>? types,
+        List<Component>? components,
+        bool? strictbounds,
+        Widget? logo,
+        ValueChanged<PlacesAutocompleteResponse>? onError,
+        String? proxyBaseUrl,
+        Client? httpClient}) {
+    final builder = (BuildContext ctx) => PLPlacesAutocompleteWidget(
+        apiKey: apiKey,
+        mode: mode,
+        language: language,
+        sessionToken: sessionToken,
+        components: components,
+        types: types,
+        location: location,
+        radius: radius,
+        strictbounds: strictbounds,
+        offset: offset,
+        hint: hint,
+        logo: logo,
+        onError: onError,
+        proxyBaseUrl: kIsWeb ? placesProxyUrl() : null,
+        httpClient: httpClient as BaseClient?);
 
-  Address({this.placeId, this.name, this.streetAddress, this.city, this.country});
+    if (mode == Mode.overlay) {
+      return showDialog(context: context, builder: builder);
+    }
+    return Navigator.push(context, MaterialPageRoute(builder: builder));
+  }
 }
