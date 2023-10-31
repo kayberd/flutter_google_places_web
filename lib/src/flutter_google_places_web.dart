@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_google_places_web/src/search_results_tile.dart';
-import 'package:uuid/uuid.dart';
 
 class FlutterGooglePlacesWeb extends StatefulWidget {
   ///[value] stores the clicked address data in
@@ -12,9 +11,6 @@ class FlutterGooglePlacesWeb extends StatefulWidget {
   ///FlutterGooglePlacesWeb.value['city'] = 'CA';
   ///FlutterGooglePlacesWeb.value['country'] = 'USA';
   static Map<String, String?>? value;
-
-  ///[showResults] boolean shows results container
-  static bool showResults = false;
 
   ///This is the API Key that is needed to communicate with google places API
   ///Get API Key: https://developers.google.com/places/web-service/get-api-key
@@ -69,11 +65,12 @@ class FlutterGooglePlacesWeb extends StatefulWidget {
 }
 
 class FlutterGooglePlacesWebState extends State<FlutterGooglePlacesWeb> {
-  List<Address> displayedResults = [];
   String? url;
   Timer? debounceTimer;
-  var uuid = Uuid();
+  List<Address> displayedResults = [];
+  bool showResults = false;
   final addressFormKey = GlobalKey<FormState>();
+
 
   @override
   void initState() {
@@ -125,7 +122,7 @@ class FlutterGooglePlacesWebState extends State<FlutterGooglePlacesWeb> {
                     );
                   },
                 ),
-                FlutterGooglePlacesWeb.showResults
+                showResults
                     ? Padding(
                         padding: EdgeInsets.only(top: 50),
                         child: Container(
@@ -168,11 +165,11 @@ class FlutterGooglePlacesWebState extends State<FlutterGooglePlacesWeb> {
   Future<List<Address>> _getLocationResults(String inputText) async {
     if (inputText.isEmpty) {
       setState(() {
-        FlutterGooglePlacesWeb.showResults = false;
+        showResults = false;
       });
     } else {
       setState(() {
-        FlutterGooglePlacesWeb.showResults = true;
+        showResults = true;
       });
     }
 
@@ -217,7 +214,7 @@ class FlutterGooglePlacesWebState extends State<FlutterGooglePlacesWeb> {
   void _selectResult(Address clickedAddress) {
     widget.onSelected?.call(clickedAddress.placeId);
     setState(() {
-      FlutterGooglePlacesWeb.showResults = false;
+      showResults = false;
       widget.controller.text = clickedAddress.name!;
       FlutterGooglePlacesWeb.value!['name'] = clickedAddress.name;
       FlutterGooglePlacesWeb.value!['streetAddress'] = clickedAddress.streetAddress;
