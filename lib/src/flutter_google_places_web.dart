@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/animation.dart';
 import 'package:dio/dio.dart';
 import 'package:rainbow_color/rainbow_color.dart';
 import 'package:uuid/uuid.dart';
@@ -46,6 +45,7 @@ class FlutterGooglePlacesWeb extends StatefulWidget {
   final Function? onSelected;
   final String? initialValue;
   final TextEditingController controller;
+  final Map<String, dynamic>? headers;
   FlutterGooglePlacesWeb(
       {Key? key,
         this.apiKey,
@@ -57,7 +57,9 @@ class FlutterGooglePlacesWeb extends StatefulWidget {
         this.required,
         this.onSelected,
         this.initialValue,
-        required this.controller});
+        required this.controller,
+        this.headers
+      });
 
   @override
   FlutterGooglePlacesWebState createState() => FlutterGooglePlacesWebState();
@@ -109,8 +111,7 @@ class FlutterGooglePlacesWebState extends State<FlutterGooglePlacesWeb> with Sin
     } else {
       componentsURL = offsetURL! + '&components=${widget.components}';
     }
-    print(componentsURL);
-    Response response = await Dio().get(componentsURL!);
+    Response response = await Dio().get(componentsURL!, options: Options(headers: widget.headers));
     var predictions = response.data['predictions'];
     if (predictions != []) {
       displayedResults.clear();
@@ -224,13 +225,6 @@ class FlutterGooglePlacesWebState extends State<FlutterGooglePlacesWeb> with Sin
                                 .map((Address addressData) => SearchResultsTile(
                                 addressData: addressData, callback: selectResult, address: FlutterGooglePlacesWeb.value))
                                 .toList(),
-                          ),
-                        ),
-                        Container(
-                          height: 30,
-                          child: Image.asset(
-                            'packages/flutter_google_places/assets/google_white.png',
-                            scale: 3,
                           ),
                         ),
                       ],
