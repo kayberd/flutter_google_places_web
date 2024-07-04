@@ -10,7 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  dio: ^4.0.0
+  dio: ^4.0.6
   uuid: ^4.4.0
   rainbow_color: ^2.0.1
 
