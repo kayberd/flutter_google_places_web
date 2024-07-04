@@ -11,7 +11,7 @@ dependencies:
   flutter:
     sdk: flutter
   dio: ^4.0.0
-  uuid: ^3.0.3
+  uuid: ^4.4.0
   rainbow_color: ^2.0.1
 
 dev_dependencies:
